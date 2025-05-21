@@ -738,11 +738,11 @@ def check_for_signals(symbol=None):
             logger.error("Binance client not initialized. Cannot place trades.")
             return
             
-        # REVERSED LOGIC: Process SELL signal as BUY order and BUY signal as SELL order
-        if signal == "SELL":  # Process SELL signal as BUY order
+        # Process signals with normal logic (BUY signal creates LONG position, SELL signal creates SHORT position)
+        if signal == "BUY":  # Process BUY signal as BUY order
             # Skip if already in a LONG position - don't close and reopen
             if position_amount > 0:
-                logger.info(f"Already in a LONG position ({position_amount}). Ignoring SELL signal (processed as BUY).")
+                logger.info(f"Already in a LONG position ({position_amount}). Ignoring BUY signal.")
                 return
                 
             # Handle SHORT → LONG transition
@@ -776,7 +776,7 @@ def check_for_signals(symbol=None):
                     return
             
             # Check if we should open a new position - at this point we know we don't have an existing LONG position
-            logger.info(f"Opening new LONG position based on SELL signal (processed as BUY) (current position amount: {position_amount})")
+            logger.info(f"Opening new LONG position based on BUY signal (current position amount: {position_amount})")
             if risk_manager.should_open_position(symbol):
                 stop_loss_price = risk_manager.calculate_stop_loss(symbol, "BUY", current_price)
                 
@@ -847,10 +847,10 @@ def check_for_signals(symbol=None):
                 else:
                     logger.error(f"❌ Failed to place BUY order!")
                     
-        elif signal == "BUY":  # Process BUY signal as SELL order
+        elif signal == "SELL":  # Process SELL signal as SELL order
             # Skip if already in a SHORT position - don't close and reopen
             if position_amount < 0:
-                logger.info(f"Already in a SHORT position ({position_amount}). Ignoring BUY signal (processed as SELL).")
+                logger.info(f"Already in a SHORT position ({position_amount}). Ignoring SELL signal.")
                 return
                 
             # Handle LONG → SHORT transition
@@ -884,7 +884,7 @@ def check_for_signals(symbol=None):
                     return
                 
             # Check if we should open a new position - at this point we know we don't have an existing SHORT position
-            logger.info(f"Opening new SHORT position based on BUY signal (processed as SELL) (current position amount: {position_amount})")
+            logger.info(f"Opening new SHORT position based on SELL signal (current position amount: {position_amount})")
             if risk_manager.should_open_position(symbol):
                 stop_loss_price = risk_manager.calculate_stop_loss(symbol, "SELL", current_price)
                 
