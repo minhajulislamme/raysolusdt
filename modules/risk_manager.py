@@ -206,6 +206,11 @@ class RiskManager:
             stop_loss_pct = STOP_LOSS_PCT_BEARISH
         elif self.current_market_condition == 'SIDEWAYS':
             stop_loss_pct = STOP_LOSS_PCT_SIDEWAYS
+        elif self.current_market_condition == 'SQUEEZE':
+            # For squeeze condition, use a slightly tighter stop loss than sideways
+            # since we're expecting a breakout soon
+            stop_loss_pct = STOP_LOSS_PCT_SIDEWAYS * 0.9
+            logger.info(f"Squeeze condition detected: Using tight stop loss at {stop_loss_pct*100:.2f}%")
         else:
             stop_loss_pct = STOP_LOSS_PCT  # Default
             
@@ -244,6 +249,11 @@ class RiskManager:
             take_profit_pct = TAKE_PROFIT_PCT_BEARISH
         elif self.current_market_condition == 'SIDEWAYS':
             take_profit_pct = TAKE_PROFIT_PCT_SIDEWAYS
+        elif self.current_market_condition == 'SQUEEZE':
+            # For squeeze condition, use a slightly higher take profit than sideways
+            # to catch bigger moves when the breakout occurs
+            take_profit_pct = TAKE_PROFIT_PCT_SIDEWAYS * 1.5
+            logger.info(f"Squeeze condition detected: Using extended take profit at {take_profit_pct*100:.2f}%")
         else:
             take_profit_pct = TAKE_PROFIT_PCT  # Default
             
@@ -288,6 +298,10 @@ class RiskManager:
             trailing_stop_pct = TRAILING_STOP_PCT_BEARISH
         elif self.current_market_condition == 'SIDEWAYS':
             trailing_stop_pct = TRAILING_STOP_PCT_SIDEWAYS
+        elif self.current_market_condition == 'SQUEEZE':
+            # For squeeze condition, use a tighter trailing stop
+            trailing_stop_pct = TRAILING_STOP_PCT_SIDEWAYS * 0.8
+            logger.info(f"Squeeze condition detected: Using tighter trailing stop at {trailing_stop_pct*100:.2f}%")
         else:
             trailing_stop_pct = TRAILING_STOP_PCT  # Default
         
@@ -354,6 +368,11 @@ class RiskManager:
             trailing_take_profit_pct = TRAILING_TAKE_PROFIT_PCT_BEARISH
         elif self.current_market_condition == 'SIDEWAYS':
             trailing_take_profit_pct = TRAILING_TAKE_PROFIT_PCT_SIDEWAYS
+        elif self.current_market_condition == 'SQUEEZE':
+            # For squeeze condition, use a dynamic trailing take profit
+            # that's moderately aggressive to catch breakout momentum
+            trailing_take_profit_pct = TRAILING_TAKE_PROFIT_PCT_SIDEWAYS * 1.2
+            logger.info(f"Squeeze condition detected: Using optimized trailing take profit at {trailing_take_profit_pct*100:.2f}%")
         else:
             trailing_take_profit_pct = TRAILING_TAKE_PROFIT_PCT  # Default
         
@@ -474,6 +493,13 @@ class RiskManager:
             tp1_pct = TAKE_PROFIT_PCT_SIDEWAYS * 0.7  # Take profits quicker in sideways markets
             tp2_pct = TAKE_PROFIT_PCT_SIDEWAYS
             tp3_pct = TAKE_PROFIT_PCT_SIDEWAYS * 1.2  # Conservative extension in sideways
+        elif self.current_market_condition == 'SQUEEZE':
+            # For squeeze condition, use a multi-tiered approach
+            # First target is close, but subsequent targets are far to capture breakout momentum
+            tp1_pct = TAKE_PROFIT_PCT_SIDEWAYS * 0.8  # Close first target to secure some profit
+            tp2_pct = TAKE_PROFIT_PCT_SIDEWAYS * 1.5  # Extended second target for breakout
+            tp3_pct = TAKE_PROFIT_PCT_SIDEWAYS * 2.5  # Aggressive third target for strong breakouts
+            logger.info(f"Squeeze condition detected: Using tiered take profits at {tp1_pct*100:.2f}%, {tp2_pct*100:.2f}%, {tp3_pct*100:.2f}%")
         else:
             tp1_pct = TAKE_PROFIT_PCT * 0.5
             tp2_pct = TAKE_PROFIT_PCT
