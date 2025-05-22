@@ -361,22 +361,22 @@ class Backtester:
             # Apply randomness - sometimes we miss trading opportunities due to various reasons
             execute_trade = np.random.random() < trade_execution_probability
             
-            # Process trading signal - REVERSED: BUY signal triggers SELL order and vice versa
-            if signal == "BUY" and execute_trade and (not self.in_position or self.position_side == "BUY"):
-                # Close existing long position if any
-                if self.in_position and self.position_side == "BUY":
-                    self.exit_position(close, date, "signal_reversal")
-                    
-                # Enter short position
-                self.enter_position("SELL", close, date)
-                
-            elif signal == "SELL" and execute_trade and (not self.in_position or self.position_side == "SELL"):
+            # Process trading signal
+            if signal == "BUY" and execute_trade and (not self.in_position or self.position_side == "SELL"):
                 # Close existing short position if any
                 if self.in_position and self.position_side == "SELL":
                     self.exit_position(close, date, "signal_reversal")
                     
                 # Enter long position
                 self.enter_position("BUY", close, date)
+                
+            elif signal == "SELL" and execute_trade and (not self.in_position or self.position_side == "BUY"):
+                # Close existing long position if any
+                if self.in_position and self.position_side == "BUY":
+                    self.exit_position(close, date, "signal_reversal")
+                    
+                # Enter short position
+                self.enter_position("SELL", close, date)
                 
             # Update equity curve
             self.update_equity(date, close)

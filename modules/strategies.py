@@ -792,7 +792,7 @@ class RaysolDynamicGridStrategy(TradingStrategy):
     def generate_grids(self, df):
         """
         Generate enhanced dynamic grid levels with asymmetric distribution
-        and Fibonacci integration - WITH REVERSED GRID TYPES
+        and Fibonacci integration
         """
         # Get latest price and indicators
         latest = df.iloc[-1]
@@ -835,10 +835,10 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                     grid_price = support_level
                     break
             
-            # REVERSED: Change from BUY to SELL
+            # Grid levels below current price are buy levels
             grid_levels.append({
                 'price': grid_price,
-                'type': 'SELL',  # REVERSED from 'BUY' to 'SELL'
+                'type': 'BUY',
                 'status': 'ACTIVE',
                 'created_at': latest['open_time']
             })
@@ -856,10 +856,10 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                     grid_price = resistance_level
                     break
             
-            # REVERSED: Change from SELL to BUY
+            # Grid levels above current price are sell levels
             grid_levels.append({
                 'price': grid_price,
-                'type': 'BUY',  # REVERSED from 'SELL' to 'BUY'
+                'type': 'SELL',
                 'status': 'ACTIVE',
                 'created_at': latest['open_time']
             })
@@ -945,7 +945,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
     def get_v_reversal_signal(self, df):
         """
         Detect V-shaped reversals in extreme market conditions
-        WITH REVERSED SIGNALS
         """
         if len(df) < 5:
             return None
@@ -958,22 +957,19 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         if market_condition not in ['EXTREME_BEARISH', 'EXTREME_BULLISH']:
             return None
             
-        # Return reversal signal if detected - REVERSED signals
+        # Return reversal signal if detected
         if potential_reversal == 1 and market_condition == 'EXTREME_BEARISH':
-            logger.info("V-shaped bullish reversal detected in extreme bearish market - REVERSED to SELL")
-            # REVERSED: return SELL instead of BUY
-            return 'SELL'
-        elif potential_reversal == -1 and market_condition == 'EXTREME_BULLISH':
-            logger.info("V-shaped bearish reversal detected in extreme bullish market - REVERSED to BUY")
-            # REVERSED: return BUY instead of SELL
+            logger.info("V-shaped bullish reversal detected in extreme bearish market")
             return 'BUY'
+        elif potential_reversal == -1 and market_condition == 'EXTREME_BULLISH':
+            logger.info("V-shaped bearish reversal detected in extreme bullish market")
+            return 'SELL'
             
         return None
     
     def get_squeeze_breakout_signal(self, df):
         """
         Detect breakouts from low-volatility squeeze conditions
-        WITH REVERSED SIGNALS
         """
         if len(df) < 5:
             return None
@@ -988,13 +984,11 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             
         # Volume spike indicates breakout
         if latest['volume_ratio'] > 1.5:
-            # Direction of breakout - REVERSED signals
+            # Direction of breakout
             if latest['close'] > latest['bb_upper']:
-                # REVERSED: return SELL instead of BUY
-                return 'SELL'
-            elif latest['close'] < latest['bb_lower']:
-                # REVERSED: return BUY instead of SELL
                 return 'BUY'
+            elif latest['close'] < latest['bb_lower']:
+                return 'SELL'
                 
         return None
     
@@ -1192,7 +1186,7 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         return None
     
     def get_grid_signal(self, df):
-        """Enhanced grid signal with position sizing - REVERSED SIGNALS"""
+        """Enhanced grid signal with position sizing"""
         latest = df.iloc[-1]
         current_price = latest['close']
         current_time = latest['open_time']
@@ -1226,7 +1220,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             closest_sell = min(sell_grids, key=lambda x: x['price'])
         
         # Determine signal based on price position relative to grids
-        # REVERSED: BUY grid triggers SELL signal instead and vice versa
         if closest_buy and current_price <= closest_buy['price'] * 1.001:
             # Mark this grid as triggered
             for grid in self.grids:
@@ -1239,8 +1232,8 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                 self.risk_manager.update_position_sizing(position_size)
                 self.position_size_pct = position_size
             
-            # REVERSED: Return SELL instead of BUY
-            return 'SELL'
+            # Return BUY signal
+            return 'BUY'
             
         elif closest_sell and current_price >= closest_sell['price'] * 0.999:
             # Mark this grid as triggered
@@ -1254,37 +1247,36 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                 self.risk_manager.update_position_sizing(position_size)
                 self.position_size_pct = position_size
             
-            # REVERSED: Return BUY instead of SELL
-            return 'BUY'
+            # Return SELL signal
+            return 'SELL'
             
         return None
     
     def get_sideways_signal(self, df):
-        """Enhanced sideways market signal with VWAP integration - WITH REVERSED SIGNALS"""
+        """Enhanced sideways market signal with VWAP integration"""
         latest = df.iloc[-1]
         
         # In sideways markets, use VWAP as a dynamic grid anchor
         
-        # REVERSED: Buy near lower Bollinger Band with VWAP confirmation becomes SELL
+        # Buy near lower Bollinger Band with VWAP confirmation
         if latest['close'] < latest['bb_lower'] * 1.01 and latest['close'] < latest['vwap']:
-            return 'SELL'  # REVERSED
+            return 'BUY'
             
-        # REVERSED: Sell near upper Bollinger Band with VWAP confirmation becomes BUY
+        # Sell near upper Bollinger Band with VWAP confirmation
         elif latest['close'] > latest['bb_upper'] * 0.99 and latest['close'] > latest['vwap']:
-            return 'BUY'  # REVERSED
+            return 'SELL'
             
-        # REVERSED: Volume-weighted RSI signals in sideways markets
+        # Volume-weighted RSI signals in sideways markets
         elif latest['volume_weighted_rsi'] < 30:
-            return 'SELL'  # REVERSED
+            return 'BUY'
         elif latest['volume_weighted_rsi'] > 70:
-            return 'BUY'  # REVERSED
+            return 'SELL'
             
         return None
     
     def get_bullish_signal(self, df):
         """
         Enhanced signal for bullish market with aggressive trend thresholds
-        WITH REVERSED SIGNALS
         """
         if len(df) < 3:
             return None
@@ -1297,25 +1289,25 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             # Adjust RSI thresholds based on market condition
             rsi_oversold = 25 if market_condition == 'EXTREME_BULLISH' else 35
             
-            # REVERSED: More aggressive oversold conditions for SELL signals (was buy) in bullish markets
+            # More aggressive oversold conditions for BUY signals in bullish markets
             if latest['rsi'] < rsi_oversold:
-                return 'SELL'  # REVERSED
+                return 'BUY'
                 
-            # REVERSED: SELL on MACD crossover with volume confirmation
+            # BUY on MACD crossover with volume confirmation
             if (prev['macd'] < prev['macd_signal'] and 
                 latest['macd'] > latest['macd_signal'] and 
                 latest['volume_ratio'] > 1.2):
-                return 'SELL'  # REVERSED
+                return 'BUY'
                 
-            # REVERSED: SELL on Supertrend direction change
+            # BUY on Supertrend direction change
             if prev['supertrend_direction'] == -1 and latest['supertrend_direction'] == 1:
-                return 'SELL'  # REVERSED
+                return 'BUY'
                 
-            # REVERSED: Buy only on extreme overbought conditions in bullish markets
+            # Sell only on extreme overbought conditions in bullish markets
             if (latest['rsi'] > 80 and 
                 latest['close'] > latest['bb_upper'] * 1.01 and
                 latest['close'] > latest['vwap'] * 1.03):
-                return 'BUY'  # REVERSED
+                return 'SELL'
                 
             return None
             
@@ -1326,7 +1318,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
     def get_bearish_signal(self, df):
         """
         Enhanced signal for bearish market with aggressive trend thresholds
-        WITH REVERSED SIGNALS
         """
         if len(df) < 3:
             return None
@@ -1339,25 +1330,25 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             # Adjust RSI thresholds based on market condition
             rsi_overbought = 75 if market_condition == 'EXTREME_BEARISH' else 65
             
-            # REVERSED: More aggressive overbought conditions for BUY signals in bearish markets
+            # More aggressive overbought conditions for SELL signals in bearish markets
             if latest['rsi'] > rsi_overbought:
-                return 'BUY'  # REVERSED
+                return 'SELL'
                 
-            # REVERSED: BUY on MACD crossover with volume confirmation
+            # SELL on MACD crossover with volume confirmation
             if (prev['macd'] > prev['macd_signal'] and 
                 latest['macd'] < latest['macd_signal'] and 
                 latest['volume_ratio'] > 1.2):
-                return 'BUY'  # REVERSED
+                return 'SELL'
                 
-            # REVERSED: BUY on Supertrend direction change
+            # SELL on Supertrend direction change
             if prev['supertrend_direction'] == 1 and latest['supertrend_direction'] == -1:
-                return 'BUY'  # REVERSED
+                return 'SELL'
                 
-            # REVERSED: SELL only on extreme oversold conditions in bearish markets
+            # Buy only on extreme oversold conditions in bearish markets
             if (latest['rsi'] < 20 and 
                 latest['close'] < latest['bb_lower'] * 0.99 and
                 latest['close'] < latest['vwap'] * 0.97):
-                return 'SELL'  # REVERSED
+                return 'BUY'
                 
             return None
             
@@ -1390,7 +1381,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
     def get_extreme_market_signal(self, df):
         """
         Specialized signal generation for extreme market conditions
-        WITH REVERSED SIGNALS
         """
         if len(df) < 3:
             return None
@@ -1404,26 +1394,25 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             
         # In extreme bullish market
         if market_condition == 'EXTREME_BULLISH':
-            # REVERSED: Look for SELLING opportunities on small dips (was buying)
+            # Look for BUYING opportunities on small dips
             if (latest['close'] < latest['vwap'] and 
                 latest['supertrend_direction'] == 1 and
                 latest['rsi'] < 40):
-                return 'SELL'  # REVERSED
+                return 'BUY'
                 
         # In extreme bearish market
         elif market_condition == 'EXTREME_BEARISH':
-            # REVERSED: Look for BUYING opportunities on small rallies (was selling)
+            # Look for SELLING opportunities on small rallies
             if (latest['close'] > latest['vwap'] and 
                 latest['supertrend_direction'] == -1 and
                 latest['rsi'] > 60):
-                return 'BUY'  # REVERSED
+                return 'SELL'
                 
         return None
     
     def get_signal(self, klines):
         """
         Enhanced signal generation integrating all the new features
-        WITH SIGNALS REVERSED (BUY → SELL and SELL → BUY)
         """
         # Prepare and add indicators to the data
         df = self.prepare_data(klines)
@@ -1451,27 +1440,22 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         reversal_signal = self.get_v_reversal_signal(df)
         if reversal_signal:
             logger.info(f"V-reversal detected in {market_condition} market. Signal: {reversal_signal}")
-            # REVERSED: Return the opposite signal
-            return "SELL" if reversal_signal == "BUY" else "BUY"
+            return reversal_signal
         
         # 2. Check for breakouts from squeeze conditions
         squeeze_signal = self.get_squeeze_breakout_signal(df)
         if squeeze_signal:
             logger.info(f"Squeeze breakout detected. Signal: {squeeze_signal}")
-            # REVERSED: Return the opposite signal
-            return "SELL" if squeeze_signal == "BUY" else "BUY"
+            return squeeze_signal
         
         # 3. Check for multi-indicator confirmation signals
         multi_signal = self.get_multi_indicator_signal(df)
         if multi_signal:
             logger.info(f"Multi-indicator confirmation. Signal: {multi_signal}")
-            # REVERSED: Return the opposite signal
-            return "SELL" if multi_signal == "BUY" else "BUY"
+            return multi_signal
         
         # 4. Get grid signal (works in all market conditions)
         grid_signal = self.get_grid_signal(df)
-        # REVERSED: If we have a grid signal, reverse it
-        grid_signal = "SELL" if grid_signal == "BUY" else ("BUY" if grid_signal == "SELL" else None)
         
         # 5. Get specific signals based on market condition
         if market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH']:
@@ -1480,8 +1464,7 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             
             # In extreme market conditions, prefer the condition-specific signal
             if condition_signal:
-                # REVERSED: Return the opposite signal
-                return "SELL" if condition_signal == "BUY" else "BUY"
+                return condition_signal
                 
         elif market_condition in ['BULLISH', 'BEARISH']:
             if market_condition == 'BULLISH':
@@ -1493,8 +1476,7 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             
             # In trending markets, prefer the trending signal
             if condition_signal:
-                # REVERSED: Return the opposite signal
-                return "SELL" if condition_signal == "BUY" else "BUY"
+                return condition_signal
                 
         elif market_condition == 'SIDEWAYS':
             condition_signal = self.get_sideways_signal(df)
@@ -1502,8 +1484,7 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             
             # In sideways markets, prioritize mean reversion signals
             if condition_signal:
-                # REVERSED: Return the opposite signal
-                return "SELL" if condition_signal == "BUY" else "BUY"
+                return condition_signal
                 
         # 6. Default to grid signal if no specialized signal was returned
         return grid_signal
