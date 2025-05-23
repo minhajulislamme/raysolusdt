@@ -92,7 +92,7 @@ class RiskManager:
             return 0
             
         # Calculate risk amount - use higher risk for small accounts
-        small_account = balance < 100.0  # Consider accounts under $100 as small
+        small_account = balance < 10.0  # Consider accounts under $100 as small
         
         # Adjust risk per trade for small accounts - more aggressive but safer than no trades
         effective_risk = RISK_PER_TRADE
