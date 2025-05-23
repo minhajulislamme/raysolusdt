@@ -1,12 +1,11 @@
+import logging
+import time
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from modules.config import (
     API_KEY, API_SECRET, RETRY_COUNT, RETRY_DELAY, TRADING_TYPE, LEVERAGE, MARGIN_TYPE,
     API_URL, API_TESTNET, RECV_WINDOW
 )
-import logging
-import time
-import math
 
 logger = logging.getLogger(__name__)
 
@@ -429,28 +428,15 @@ class BinanceClient:
         max_retries = 3
         backoff_factor = 2
         
-        # Get symbol info for precision formatting
-        symbol_info = self.get_symbol_info(symbol)
-        if not symbol_info:
-            logger.error(f"Failed to get symbol info for {symbol}, cannot place market order with correct precision")
-            return None
-            
-        # Format quantity with proper precision
-        qty_precision = symbol_info['quantity_precision']
-        min_qty = symbol_info['min_qty']
-        formatted_quantity = self.format_number(quantity, qty_precision, round_down=True, min_value=min_qty)
-        
-        logger.info(f"Formatted market order quantity: {quantity} -> {formatted_quantity}")
-        
         for retry in range(max_retries):
             try:
                 order = self.client.futures_create_order(
                     symbol=symbol,
                     side=side,  # "BUY" or "SELL"
                     type="MARKET",
-                    quantity=formatted_quantity
+                    quantity=quantity
                 )
-                logger.info(f"Placed {side} market order for {formatted_quantity} {symbol}")
+                logger.info(f"Placed {side} market order for {quantity} {symbol}")
                 return order
             except Exception as e:
                 error_str = str(e)
@@ -487,23 +473,6 @@ class BinanceClient:
         max_retries = 3
         backoff_factor = 2
         
-        # Get symbol info for precision formatting
-        symbol_info = self.get_symbol_info(symbol)
-        if not symbol_info:
-            logger.error(f"Failed to get symbol info for {symbol}, cannot place limit order with correct precision")
-            return None
-            
-        # Format quantity and price with proper precision
-        price_precision = symbol_info['price_precision']
-        qty_precision = symbol_info['quantity_precision']
-        min_qty = symbol_info['min_qty']
-        
-        formatted_quantity = self.format_number(quantity, qty_precision, round_down=True, min_value=min_qty)
-        formatted_price = self.format_number(price, price_precision)
-        
-        logger.info(f"Formatted limit order values: quantity {quantity} -> {formatted_quantity}, " +
-                   f"price {price} -> {formatted_price}")
-        
         for retry in range(max_retries):
             try:
                 order = self.client.futures_create_order(
@@ -511,10 +480,10 @@ class BinanceClient:
                     side=side,
                     type="LIMIT",
                     timeInForce="GTC",  # Good Till Cancelled
-                    quantity=formatted_quantity,
-                    price=formatted_price
+                    quantity=quantity,
+                    price=price
                 )
-                logger.info(f"Placed {side} limit order for {formatted_quantity} {symbol} at {formatted_price}")
+                logger.info(f"Placed {side} limit order for {quantity} {symbol} at {price}")
                 return order
             except Exception as e:
                 error_str = str(e)
@@ -551,25 +520,6 @@ class BinanceClient:
         max_retries = 3
         backoff_factor = 2
         
-        # Get symbol info for precision formatting
-        symbol_info = self.get_symbol_info(symbol)
-        if not symbol_info:
-            logger.error(f"Failed to get symbol info for {symbol}, cannot place stop loss order with correct precision")
-            return None
-            
-        # Format quantity and prices with proper precision
-        price_precision = symbol_info['price_precision']
-        qty_precision = symbol_info['quantity_precision']
-        min_qty = symbol_info['min_qty']
-        
-        formatted_stop_price = self.format_number(stop_price, price_precision)
-        formatted_quantity = self.format_number(quantity, qty_precision, round_down=True, min_value=min_qty)
-        formatted_price = self.format_number(price, price_precision) if price else None
-        
-        logger.info(f"Formatted stop loss values: stop_price {stop_price} -> {formatted_stop_price}, " +
-                   f"quantity {quantity} -> {formatted_quantity}" +
-                   (f", price {price} -> {formatted_price}" if price else ""))
-        
         # First, cancel any existing stop loss orders for this symbol to avoid conflicts
         try:
             existing_orders = self.get_open_orders(symbol)
@@ -582,15 +532,8 @@ class BinanceClient:
                             orderId=order.get('orderId')
                         )
                         logger.info(f"Cancelled existing stop loss order {order.get('orderId')} for {symbol}")
-                    except BinanceAPIException as e:
-                        # Handle the specific "Unknown order" error more gracefully
-                        if e.code == -2011 and "Unknown order" in str(e):
-                            # Order may have been already cancelled or executed by the exchange
-                            logger.info(f"Stop loss order {order.get('orderId')} for {symbol} already cancelled or executed")
-                        else:
-                            logger.warning(f"Error cancelling existing stop loss order: {e}")
                     except Exception as e:
-                        logger.warning(f"Unexpected error cancelling existing stop loss order: {e}")
+                        logger.warning(f"Error cancelling existing stop loss order: {e}")
         except Exception as e:
             logger.warning(f"Error checking existing stop loss orders: {e}")
         
@@ -602,16 +545,16 @@ class BinanceClient:
                     'side': side,  # Opposite of position side
                     'type': 'STOP_MARKET',
                     'closePosition': 'true',
-                    'stopPrice': formatted_stop_price,
+                    'stopPrice': stop_price,
                 }
                 if price:
                     params['type'] = 'STOP'
                     params['timeInForce'] = 'GTC'
-                    params['quantity'] = formatted_quantity
-                    params['price'] = formatted_price
+                    params['quantity'] = quantity
+                    params['price'] = price
                     
                 order = self.client.futures_create_order(**params)
-                logger.info(f"Placed stop loss order at {formatted_stop_price}")
+                logger.info(f"Placed stop loss order at {stop_price}")
                 return order
             except Exception as e:
                 error_str = str(e)
@@ -648,25 +591,6 @@ class BinanceClient:
         max_retries = 3
         backoff_factor = 2
         
-        # Get symbol info for precision formatting
-        symbol_info = self.get_symbol_info(symbol)
-        if not symbol_info:
-            logger.error(f"Failed to get symbol info for {symbol}, cannot place take profit order with correct precision")
-            return None
-            
-        # Format quantity and prices with proper precision
-        price_precision = symbol_info['price_precision']
-        qty_precision = symbol_info['quantity_precision']
-        min_qty = symbol_info['min_qty']
-        
-        formatted_stop_price = self.format_number(stop_price, price_precision)
-        formatted_quantity = self.format_number(quantity, qty_precision, round_down=True, min_value=min_qty)
-        formatted_price = self.format_number(price, price_precision) if price else None
-        
-        logger.info(f"Formatted take profit values: stop_price {stop_price} -> {formatted_stop_price}, " +
-                   f"quantity {quantity} -> {formatted_quantity}" +
-                   (f", price {price} -> {formatted_price}" if price else ""))
-        
         # First, cancel any existing take profit orders for this symbol to avoid conflicts
         try:
             existing_orders = self.get_open_orders(symbol)
@@ -679,15 +603,8 @@ class BinanceClient:
                             orderId=order.get('orderId')
                         )
                         logger.info(f"Cancelled existing take profit order {order.get('orderId')} for {symbol}")
-                    except BinanceAPIException as e:
-                        # Handle the specific "Unknown order" error more gracefully
-                        if e.code == -2011 and "Unknown order" in str(e):
-                            # Order may have been already cancelled or executed by the exchange
-                            logger.info(f"Take profit order {order.get('orderId')} for {symbol} already cancelled or executed")
-                        else:
-                            logger.warning(f"Error cancelling existing take profit order: {e}")
                     except Exception as e:
-                        logger.warning(f"Unexpected error cancelling existing take profit order: {e}")
+                        logger.warning(f"Error cancelling existing take profit order: {e}")
         except Exception as e:
             logger.warning(f"Error checking existing take profit orders: {e}")
             
@@ -699,16 +616,16 @@ class BinanceClient:
                     'side': side,  # Opposite of position side
                     'type': 'TAKE_PROFIT_MARKET',
                     'closePosition': 'true',
-                    'stopPrice': formatted_stop_price,
+                    'stopPrice': stop_price,
                 }
                 if price:
                     params['type'] = 'TAKE_PROFIT'
                     params['timeInForce'] = 'GTC'
-                    params['quantity'] = formatted_quantity
-                    params['price'] = formatted_price
+                    params['quantity'] = quantity
+                    params['price'] = price
                     
                 order = self.client.futures_create_order(**params)
-                logger.info(f"Placed take profit order at {formatted_stop_price}")
+                logger.info(f"Placed take profit order at {stop_price}")
                 return order
             except Exception as e:
                 error_str = str(e)
@@ -747,15 +664,8 @@ class BinanceClient:
             logger.info(f"Cancelled all open orders for {symbol}")
             return result
         except BinanceAPIException as e:
-            # Handle the specific "Unknown order" error more gracefully
-            if e.code == -2011 and "Unknown order" in str(e):
-                # Orders may have been already cancelled or executed by the exchange
-                logger.info(f"All orders for {symbol} were already cancelled or executed")
-                # Return empty dict as a valid response
-                return {}
-            else:
-                logger.error(f"Failed to cancel orders: {e}")
-                return None
+            logger.error(f"Failed to cancel orders: {e}")
+            return None
     
     def get_current_price(self, symbol):
         """Get current price of a symbol"""
@@ -860,13 +770,7 @@ class BinanceClient:
         # Specifically get orders related to this symbol's position
         position_orders = self.get_position_related_orders(symbol)
         cancelled = 0
-        already_cancelled = 0
         
-        # If no orders found, return early
-        if not position_orders:
-            logger.info(f"No position-related orders found for {symbol}")
-            return cancelled
-            
         # Double verify that we only cancel orders for the specified symbol
         for order in position_orders:
             try:
@@ -885,60 +789,9 @@ class BinanceClient:
                     # But adding a safety check for robustness
                     logger.warning(f"Skipping cancellation of order {order_id} for {order_symbol} (not {symbol})")
             except BinanceAPIException as e:
-                # Handle the specific "Unknown order" error more gracefully
-                if e.code == -2011 and "Unknown order" in str(e):
-                    # Order may have been already cancelled or executed by the exchange
-                    order_id = order.get('orderId')
-                    order_type = order.get('type', 'unknown')
-                    logger.info(f"Order {order_id} ({order_type}) for {symbol} already cancelled or executed")
-                    already_cancelled += 1
-                else:
-                    logger.error(f"Failed to cancel position order for {symbol}: {e}")
+                logger.error(f"Failed to cancel position order for {symbol}: {e}")
             except Exception as e:
                 logger.error(f"Unexpected error cancelling position order for {symbol}: {e}")
                 
-        if cancelled > 0:
-            logger.info(f"Cancelled {cancelled} position-related orders for {symbol}")
-        if already_cancelled > 0:
-            logger.info(f"{already_cancelled} orders for {symbol} were already cancelled or executed")
-            
+        logger.info(f"Cancelled {cancelled} position-related orders for {symbol}")
         return cancelled
-        return cancelled
-    
-    def format_number(self, number, precision, round_down=False, min_value=None):
-        """Format a number to the specified precision
-        
-        Args:
-            number (float): The number to format
-            precision (int): The number of decimal places
-            round_down (bool): Whether to round down (for quantities) or to nearest (for prices)
-            min_value (float): Optional minimum value to enforce (used for quantities)
-            
-        Returns:
-            float: The formatted number
-        """
-        if number is None:
-            return None
-            
-        # Convert to proper decimal places
-        factor = 10 ** precision
-        
-        if round_down:
-            # For quantities, we often want to round down to ensure we don't exceed available funds
-            # math.floor gives us the largest integer less than or equal to x
-            formatted = math.floor(number * factor) / factor
-            
-            # If we have a minimum value (for quantities), ensure we don't go below it
-            if min_value is not None and formatted < min_value:
-                # If the original number is already below min_value, return min_value
-                if number < min_value:
-                    return min_value
-                # Otherwise, the rounding caused it to go below min_value
-                # In this case, we'll use the original precision with regular rounding
-                # to avoid going below the minimum
-                return round(number * factor) / factor
-            
-            return formatted
-        else:
-            # For prices, we typically round to the nearest value
-            return round(number * factor) / factor

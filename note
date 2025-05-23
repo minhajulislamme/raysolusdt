@@ -181,3 +181,7 @@ Enhanced momentum filtering for trend confirmation
   File "/home/minhaz/raysolusdt/venv/lib/python3.10/site-packages/pandas/core/internals/managers.py", line 289, in get_dtypes
     return dtypes.take(self.blknos)
 IndexError: index 31 is out of bounds for axis 0 with size 31
+
+
+
+#codebase check my all file i face a problem on live my account have 50 or 60 or some time 100 dollar or more deffrent amount blancce but every time trade execute only 5.88 dollar
