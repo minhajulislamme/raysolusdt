@@ -163,7 +163,7 @@ class TradingStrategy:
 class RaysolDynamicGridStrategy(TradingStrategy):
     """
     Enhanced Dynamic RAYSOL Grid Trading Strategy that adapts to market trends
-    and different market conditions (bullish, bearish, and sideways).
+    and different market conditions (bullish, bearish, extreme bullish, and extreme bearish).
     
     Features:
     - Dynamic position sizing based on volatility and account equity
@@ -172,9 +172,8 @@ class RaysolDynamicGridStrategy(TradingStrategy):
     - Automatic grid reset when price moves outside range
     - Cool-off period after consecutive losses
     - Supertrend indicator for faster trend detection
-    - VWAP for sideways markets
+    - VWAP for trending markets
     - Volume-weighted RSI for better signals
-    - Bollinger Band squeeze detection for breakouts
     - Fibonacci level integration for support/resistance
     - Enhanced momentum filtering and multi-indicator confirmation
     - Sophisticated reversal detection
@@ -201,7 +200,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                  supertrend_period=10,
                  supertrend_multiplier=3.0,
                  fibonacci_levels=[0.236, 0.382, 0.5, 0.618, 0.786],
-                 squeeze_threshold=0.5,
                  cooloff_period=3,
                  max_consecutive_losses=2):
         
@@ -230,7 +228,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         self.supertrend_period = supertrend_period
         self.supertrend_multiplier = supertrend_multiplier
         self.fibonacci_levels = fibonacci_levels
-        self.squeeze_threshold = squeeze_threshold
         self.cooloff_period = cooloff_period
         self.max_consecutive_losses = max_consecutive_losses
         
@@ -363,9 +360,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         df['bb_middle'] = indicator_bb.bollinger_mavg()
         df['bb_lower'] = indicator_bb.bollinger_lband()
         df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
-        
-        # Bollinger Band Squeeze detection
-        df['bb_squeeze'] = df['bb_width'] < self.squeeze_threshold
         
         # MACD for additional trend confirmation
         macd = ta.trend.MACD(df['close'], window_slow=26, window_fast=12, window_sign=9)
@@ -572,14 +566,9 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             lookback = min(lookback_period, i)
             avg_adx = df['adx'].iloc[i-lookback:i+1].mean() if i >= lookback else adx
             
-            # Check for squeeze condition (low volatility, potential breakout)
-            is_squeeze = bb_width < self.squeeze_threshold
-            
             # Calculate the strength of each potential market condition
             bullish_strength = 0
             bearish_strength = 0
-            sideways_strength = 0
-            squeeze_strength = 0
             
             # ADX trending strength (0-100)
             trend_strength = min(100, adx * 2)  # Normalize to 0-100 scale
@@ -614,30 +603,20 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                 if bias_score < -60 and trend_strength > 70 and adx > self.adx_threshold * 1.5:
                     bearish_strength += 30  # Extra boost for extreme bearish
             
-            if trend_strength < 40:  # Low trend strength = sideways
-                sideways_strength = 100 - trend_strength
-                
-            if is_squeeze:
-                squeeze_strength = 100 if bb_width < self.squeeze_threshold * 0.7 else 70
-            
             # Prevent rapid condition changes by requiring larger threshold to change states
             new_condition = None
             
             # Determine the new condition based on highest strength
-            if max(bullish_strength, bearish_strength, sideways_strength, squeeze_strength) == bullish_strength:
+            if bullish_strength >= bearish_strength:
                 if bullish_strength > 80:
                     new_condition = 'EXTREME_BULLISH'
                 else:
                     new_condition = 'BULLISH'
-            elif max(bullish_strength, bearish_strength, sideways_strength, squeeze_strength) == bearish_strength:
+            else:
                 if bearish_strength > 80:
                     new_condition = 'EXTREME_BEARISH'
                 else:
                     new_condition = 'BEARISH'
-            elif max(bullish_strength, bearish_strength, sideways_strength, squeeze_strength) == squeeze_strength:
-                new_condition = 'SQUEEZE'
-            else:
-                new_condition = 'SIDEWAYS'
             
             # Apply hysteresis to avoid rapid condition changes
             # Only change condition if new one is persistent or very strong
@@ -655,20 +634,12 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                         max_current_strength = bullish_strength
                     elif previous_condition == 'BEARISH' or previous_condition == 'EXTREME_BEARISH':
                         max_current_strength = bearish_strength
-                    elif previous_condition == 'SQUEEZE':
-                        max_current_strength = squeeze_strength
-                    else:  # SIDEWAYS
-                        max_current_strength = sideways_strength
                     
                     max_new_strength = 0
                     if new_condition == 'BULLISH' or new_condition == 'EXTREME_BULLISH':
                         max_new_strength = bullish_strength
                     elif new_condition == 'BEARISH' or new_condition == 'EXTREME_BEARISH':
                         max_new_strength = bearish_strength
-                    elif new_condition == 'SQUEEZE':
-                        max_new_strength = squeeze_strength
-                    else:  # SIDEWAYS
-                        max_new_strength = sideways_strength
                     
                     # Only change if the new condition is significantly stronger
                     if max_new_strength > max_current_strength + change_threshold:
@@ -723,15 +694,9 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         if market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH']:
             # Extreme trend - reduce position size for safety
             condition_factor = 0.75
-        elif market_condition in ['BULLISH', 'BEARISH']:
+        else:  # BULLISH or BEARISH
             # Clear trend - standard position
             condition_factor = 1.0
-        elif market_condition == 'SQUEEZE':
-            # Squeeze condition - smaller position for breakout
-            condition_factor = 0.8
-        else:  # SIDEWAYS
-            # Sideways market - slightly smaller position
-            condition_factor = 0.9
             
         # Calculate final position size
         position_size = base_position * volatility_factor * condition_factor
@@ -775,18 +740,12 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             
             # Adjust based on market condition
             market_condition = latest['market_condition']
-            if market_condition == 'SIDEWAYS':
-                # Tighter grid spacing in sideways markets
-                condition_multiplier = 0.8
-            elif market_condition in ['BULLISH', 'BEARISH']:
+            if market_condition in ['BULLISH', 'BEARISH']:
                 # Wider grid spacing in trending markets
                 condition_multiplier = self.trend_condition_multiplier
             elif market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH']:
                 # Even wider spacing in extreme trends
                 condition_multiplier = self.trend_condition_multiplier * 1.5
-            elif market_condition == 'SQUEEZE':
-                # Prepare for potential breakout with wider spacing
-                condition_multiplier = self.trend_condition_multiplier * 1.2
             else:
                 condition_multiplier = 1.0
             
@@ -819,7 +778,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             return 0.7  # 70% of levels above
         elif market_condition == 'BEARISH':
             return 0.3  # 30% of levels above
-        # Neutral bias in sideways or squeeze markets
         else:
             return 0.5  # 50% of levels above/below (neutral)
     
@@ -921,11 +879,9 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         trend_change = (self.current_trend != current_trend)
         condition_change = (
             (self.current_market_condition in ['BULLISH', 'BEARISH'] and 
-             current_market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH', 'SQUEEZE']) or
+             current_market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH']) or
             (self.current_market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH'] and 
-             current_market_condition in ['BULLISH', 'BEARISH', 'SQUEEZE']) or
-            (self.current_market_condition == 'SQUEEZE' and 
-             current_market_condition in ['BULLISH', 'BEARISH', 'EXTREME_BULLISH', 'EXTREME_BEARISH'])
+             current_market_condition in ['BULLISH', 'BEARISH'])
         )
         
         if trend_change or condition_change:
@@ -999,31 +955,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
             logger.info("V-shaped bearish reversal detected in extreme bullish market")
             return 'SELL'
             
-        return None
-    
-    def get_squeeze_breakout_signal(self, df):
-        """
-        Detect breakouts from low-volatility squeeze conditions
-        """
-        if len(df) < 5:
-            return None
-            
-        latest = df.iloc[-1]
-        prev = df.iloc[-2]
-        market_condition = latest['market_condition']
-        
-        # Only look for breakout if we're in or just exited a squeeze
-        if market_condition != 'SQUEEZE' and prev['market_condition'] != 'SQUEEZE':
-            return None
-            
-        # Volume spike indicates breakout
-        if latest['volume_ratio'] > 1.5:
-            # Direction of breakout
-            if latest['close'] > latest['bb_upper']:
-                return 'BUY'
-            elif latest['close'] < latest['bb_lower']:
-                return 'SELL'
-                
         return None
     
     def get_multi_indicator_signal(self, df):
@@ -1172,10 +1103,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         elif market_condition in ['BEARISH', 'EXTREME_BEARISH']:
             bull_threshold += 1.5  # Much harder to trigger buy in bearish market
             bear_threshold -= 1.0  # Easier to trigger sell in bearish market, but still higher than before
-        elif market_condition == 'SQUEEZE':
-            # In squeeze, wait for much stronger confirmation
-            bull_threshold += 1.5
-            bear_threshold += 1.5
             
         # === FINAL SIGNAL DETERMINATION ===
         
@@ -1485,22 +1412,16 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                 logger.info(f"V-reversal detected in {market_condition} market. Signal: {reversal_signal}")
                 return reversal_signal
             
-            # 2. Check for breakouts from squeeze conditions
-            squeeze_signal = self.get_squeeze_breakout_signal(df)
-            if squeeze_signal:
-                logger.info(f"Squeeze breakout detected. Signal: {squeeze_signal}")
-                return squeeze_signal
-            
-            # 3. Check for multi-indicator confirmation signals
+            # 2. Check for multi-indicator confirmation signals
             multi_signal = self.get_multi_indicator_signal(df)
             if multi_signal:
                 logger.info(f"Multi-indicator confirmation. Signal: {multi_signal}")
                 return multi_signal
             
-            # 4. Get grid signal (works in all market conditions)
+            # 3. Get grid signal (works in all market conditions)
             grid_signal = self.get_grid_signal(df)
             
-            # 5. Get specific signals based on market condition
+            # 4. Get specific signals based on market condition
             if market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH']:
                 condition_signal = self.get_extreme_market_signal(df)
                 logger.debug(f"EXTREME market detected. Grid signal: {grid_signal}, Extreme signal: {condition_signal}")
@@ -1518,14 +1439,6 @@ class RaysolDynamicGridStrategy(TradingStrategy):
                 logger.debug(f"{market_condition} market detected. Grid signal: {grid_signal}, Condition signal: {condition_signal}")
                 
                 # In trending markets, prefer the trending signal
-                if condition_signal:
-                    return condition_signal
-                    
-            elif market_condition == 'SIDEWAYS':
-                condition_signal = self.get_sideways_signal(df)
-                logger.debug(f"SIDEWAYS market detected. Grid signal: {grid_signal}, Sideways signal: {condition_signal}")
-                
-                # In sideways markets, prioritize mean reversion signals
                 if condition_signal:
                     return condition_signal
                     
