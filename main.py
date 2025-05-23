@@ -549,10 +549,26 @@ def on_order_update(order_data):
                     # If position was closed or is very small (dust)
                     if not position or abs(position['position_amount']) < 0.000001:
                         logger.info(f"Position closed via {order_type}, canceling any remaining orders")
-                        cancelled = binance_client.cancel_all_open_orders(symbol)
-                        logger.info(f"Cancelled {cancelled} remaining orders for {symbol}")
+                        # First try to cancel all orders at once
+                        try:
+                            cancelled = binance_client.cancel_all_open_orders(symbol)
+                            if cancelled is not None:
+                                logger.info(f"Cancelled all remaining orders for {symbol}")
+                        except Exception as e:
+                            logger.warning(f"Error with bulk order cancellation for {symbol}, will try individual cancellation: {e}")
+                            # Fallback to individual order cancellation
+                            cancelled = binance_client.cancel_position_orders(symbol)
+                            if cancelled > 0:
+                                logger.info(f"Cancelled {cancelled} position-related orders for {symbol}")
                 except Exception as e:
-                    logger.error(f"Error checking position after {order_type}: {e}")
+                    logger.warning(f"Error checking position after {order_type}: {e}")
+                    # Still try to cancel orders even if position check fails
+                    try:
+                        cancelled = binance_client.cancel_position_orders(symbol)
+                        if cancelled > 0:
+                            logger.info(f"Cancelled {cancelled} position-related orders for {symbol}")
+                    except Exception as cancel_error:
+                        logger.error(f"Failed to cancel orders after position check error: {cancel_error}")
             else:
                 logger.info(f"✅✅✅ EXECUTED {order_type} {side} ORDER: {filled_qty} {symbol} @ {price} ✅✅✅")
                 
@@ -1890,12 +1906,34 @@ def place_partial_take_profits(symbol, side, quantity, entry_price, position_inf
             close_side = "SELL" if side == "BUY" else "BUY"  # Opposite side to close
             
             # For partial TPs, we can't use closePosition=true, need to specify quantity
+            # Get symbol info for precision formatting
+            symbol_info = binance_client.get_symbol_info(symbol)
+            if not symbol_info:
+                logger.error(f"Failed to get symbol info for {symbol}, cannot place take profit order with correct precision")
+                continue
+                
+            # Format quantity and price with proper precision
+            price_precision = symbol_info['price_precision']
+            qty_precision = symbol_info['quantity_precision']
+            min_qty = symbol_info['min_qty']
+            
+            formatted_stop_price = binance_client.format_number(tp_level['price'], price_precision)
+            formatted_quantity = binance_client.format_number(level_qty, qty_precision, round_down=True, min_value=min_qty)
+            
+            # Skip this TP level if the quantity is too small after rounding
+            if formatted_quantity < min_qty:
+                logger.warning(f"Skipping TP level {i+1}: formatted quantity {formatted_quantity} is below minimum {min_qty}")
+                continue
+                
+            logger.info(f"Formatted take profit values: stopPrice {tp_level['price']} -> {formatted_stop_price}, " +
+                      f"quantity {level_qty} -> {formatted_quantity}")
+            
             tp_order = binance_client.client.futures_create_order(
                 symbol=symbol,
                 side=close_side,
                 type='TAKE_PROFIT_MARKET',
-                stopPrice=tp_level['price'],
-                quantity=level_qty,
+                stopPrice=formatted_stop_price,
+                quantity=formatted_quantity,
                 reduceOnly='true',
                 timeInForce='GTC'
             )
@@ -2006,7 +2044,8 @@ def round_quantity(quantity, symbol):
         symbol_info = binance_client.get_symbol_info(symbol)
         if symbol_info and 'quantity_precision' in symbol_info:
             precision = symbol_info['quantity_precision']
-            return round(quantity, precision)
+            min_qty = symbol_info['min_qty']
+            return binance_client.format_number(quantity, precision, round_down=True, min_value=min_qty)
         return quantity  # Return as is if we couldn't get precision
     except Exception as e:
         logger.warning(f"Error rounding quantity: {e}")

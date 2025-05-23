@@ -16,6 +16,11 @@ class SupertrendIndicator:
         
     def calculate(self, df):
         """Calculate Supertrend indicator"""
+        # Check if we have enough data
+        if len(df) <= self.period:
+            logger.warning(f"Not enough data for Supertrend calculation. Required: >{self.period}, Got: {len(df)}")
+            return df
+            
         # Calculate ATR
         df['atr'] = ta.volatility.average_true_range(
             df['high'], df['low'], df['close'], window=self.period
@@ -31,52 +36,81 @@ class SupertrendIndicator:
         df['final_upper'] = np.nan
         df['final_lower'] = np.nan
         
+        # Get valid indices to avoid out-of-bounds errors
+        valid_indices = df.index[self.period:len(df)]
+        
+        if len(valid_indices) == 0:
+            logger.warning("No valid indices for Supertrend calculation")
+            return df
+            
         # Calculate final upper and lower bands
         for i in range(self.period, len(df)):
+            # Safely get the current index
+            if i >= len(df.index):
+                logger.warning(f"Index {i} is out of bounds for df.index with size {len(df.index)}")
+                break
+                
+            # Make sure i is within bounds
+            if i < 0 or i >= len(df):
+                logger.warning(f"Index {i} is out of bounds for DataFrame with size {len(df)}")
+                continue
+                
+            current_idx = df.index[i]
+            prev_idx = df.index[i-1] if i-1 < len(df.index) and i-1 >= 0 else None
+            
             if i == self.period:
-                # Using .loc to properly set values
-                df.loc[df.index[i], 'final_upper'] = df['basic_upper'].iloc[i]
-                df.loc[df.index[i], 'final_lower'] = df['basic_lower'].iloc[i]
+                # Initial values
+                df.loc[current_idx, 'final_upper'] = df['basic_upper'].iloc[i]
+                df.loc[current_idx, 'final_lower'] = df['basic_lower'].iloc[i]
                 
                 # Initial trend direction
                 if df['close'].iloc[i] <= df['final_upper'].iloc[i]:
-                    df.loc[df.index[i], 'supertrend'] = df['final_upper'].iloc[i]
-                    df.loc[df.index[i], 'supertrend_direction'] = -1  # Downtrend
+                    df.loc[current_idx, 'supertrend'] = df['final_upper'].iloc[i]
+                    df.loc[current_idx, 'supertrend_direction'] = -1  # Downtrend
                 else:
-                    df.loc[df.index[i], 'supertrend'] = df['final_lower'].iloc[i]
-                    df.loc[df.index[i], 'supertrend_direction'] = 1  # Uptrend
+                    df.loc[current_idx, 'supertrend'] = df['final_lower'].iloc[i]
+                    df.loc[current_idx, 'supertrend_direction'] = 1  # Uptrend
             else:
+                if prev_idx is None:
+                    # Skip if we can't access the previous index
+                    continue
+                
+                # Safety check for i-1 index
+                if i-1 < 0 or i-1 >= len(df):
+                    logger.warning(f"Previous index {i-1} is out of bounds for DataFrame with size {len(df)}")
+                    continue
+                    
                 # Calculate upper band
                 if (df['basic_upper'].iloc[i] < df['final_upper'].iloc[i-1] or 
                     df['close'].iloc[i-1] > df['final_upper'].iloc[i-1]):
-                    df.loc[df.index[i], 'final_upper'] = df['basic_upper'].iloc[i]
+                    df.loc[current_idx, 'final_upper'] = df['basic_upper'].iloc[i]
                 else:
-                    df.loc[df.index[i], 'final_upper'] = df['final_upper'].iloc[i-1]
+                    df.loc[current_idx, 'final_upper'] = df['final_upper'].iloc[i-1]
                 
                 # Calculate lower band
                 if (df['basic_lower'].iloc[i] > df['final_lower'].iloc[i-1] or 
                     df['close'].iloc[i-1] < df['final_lower'].iloc[i-1]):
-                    df.loc[df.index[i], 'final_lower'] = df['basic_lower'].iloc[i]
+                    df.loc[current_idx, 'final_lower'] = df['basic_lower'].iloc[i]
                 else:
-                    df.loc[df.index[i], 'final_lower'] = df['final_lower'].iloc[i-1]
+                    df.loc[current_idx, 'final_lower'] = df['final_lower'].iloc[i-1]
                 
                 # Calculate Supertrend value
                 if (df['supertrend'].iloc[i-1] == df['final_upper'].iloc[i-1] and 
                     df['close'].iloc[i] <= df['final_upper'].iloc[i]):
-                    df.loc[df.index[i], 'supertrend'] = df['final_upper'].iloc[i]
-                    df.loc[df.index[i], 'supertrend_direction'] = -1  # Downtrend
+                    df.loc[current_idx, 'supertrend'] = df['final_upper'].iloc[i]
+                    df.loc[current_idx, 'supertrend_direction'] = -1  # Downtrend
                 elif (df['supertrend'].iloc[i-1] == df['final_upper'].iloc[i-1] and 
                       df['close'].iloc[i] > df['final_upper'].iloc[i]):
-                    df.loc[df.index[i], 'supertrend'] = df['final_lower'].iloc[i]
-                    df.loc[df.index[i], 'supertrend_direction'] = 1  # Uptrend
+                    df.loc[current_idx, 'supertrend'] = df['final_lower'].iloc[i]
+                    df.loc[current_idx, 'supertrend_direction'] = 1  # Uptrend
                 elif (df['supertrend'].iloc[i-1] == df['final_lower'].iloc[i-1] and 
                       df['close'].iloc[i] >= df['final_lower'].iloc[i]):
-                    df.loc[df.index[i], 'supertrend'] = df['final_lower'].iloc[i]
-                    df.loc[df.index[i], 'supertrend_direction'] = 1  # Uptrend
+                    df.loc[current_idx, 'supertrend'] = df['final_lower'].iloc[i]
+                    df.loc[current_idx, 'supertrend_direction'] = 1  # Uptrend
                 elif (df['supertrend'].iloc[i-1] == df['final_lower'].iloc[i-1] and 
                       df['close'].iloc[i] < df['final_lower'].iloc[i]):
-                    df.loc[df.index[i], 'supertrend'] = df['final_upper'].iloc[i]
-                    df.loc[df.index[i], 'supertrend_direction'] = -1  # Downtrend
+                    df.loc[current_idx, 'supertrend'] = df['final_upper'].iloc[i]
+                    df.loc[current_idx, 'supertrend_direction'] = -1  # Downtrend
         
         return df
 
@@ -1414,80 +1448,103 @@ class RaysolDynamicGridStrategy(TradingStrategy):
         """
         Enhanced signal generation integrating all the new features
         """
-        # Prepare and add indicators to the data
-        df = self.prepare_data(klines)
-        df = self.add_indicators(df)
-        
-        if len(df) < self.trend_ema_slow + 5:
-            # Not enough data to generate reliable signals
+        try:
+            # Prepare data
+            df = self.prepare_data(klines)
+            
+            # Safety check for empty dataframe
+            if df is None or len(df) == 0:
+                logger.warning("Empty dataframe after prepare_data, cannot generate signal")
+                return None
+                
+            # Add indicators
+            df = self.add_indicators(df)
+            
+            # Safety check for minimum data requirements
+            if len(df) < self.trend_ema_slow + 5:
+                logger.info(f"Not enough data to generate reliable signals. Need {self.trend_ema_slow + 5}, got {len(df)}")
+                return None
+            
+            # Get latest data
+            latest = df.iloc[-1]
+            market_condition = latest['market_condition']
+            current_time = latest['open_time']
+            
+            # Update risk manager with current market condition
+            if self.risk_manager:
+                self.risk_manager.set_market_condition(market_condition)
+            
+            # Check for cool-off period first
+            if self.in_cooloff_period(current_time):
+                logger.info(f"In cool-off period after {self.consecutive_losses} consecutive losses. No trading signals.")
+                return None
+            
+            # 1. Check for V-shaped reversals in extreme market conditions
+            reversal_signal = self.get_v_reversal_signal(df)
+            if reversal_signal:
+                logger.info(f"V-reversal detected in {market_condition} market. Signal: {reversal_signal}")
+                return reversal_signal
+            
+            # 2. Check for breakouts from squeeze conditions
+            squeeze_signal = self.get_squeeze_breakout_signal(df)
+            if squeeze_signal:
+                logger.info(f"Squeeze breakout detected. Signal: {squeeze_signal}")
+                return squeeze_signal
+            
+            # 3. Check for multi-indicator confirmation signals
+            multi_signal = self.get_multi_indicator_signal(df)
+            if multi_signal:
+                logger.info(f"Multi-indicator confirmation. Signal: {multi_signal}")
+                return multi_signal
+            
+            # 4. Get grid signal (works in all market conditions)
+            grid_signal = self.get_grid_signal(df)
+            
+            # 5. Get specific signals based on market condition
+            if market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH']:
+                condition_signal = self.get_extreme_market_signal(df)
+                logger.debug(f"EXTREME market detected. Grid signal: {grid_signal}, Extreme signal: {condition_signal}")
+                
+                # In extreme market conditions, prefer the condition-specific signal
+                if condition_signal:
+                    return condition_signal
+                    
+            elif market_condition in ['BULLISH', 'BEARISH']:
+                if market_condition == 'BULLISH':
+                    condition_signal = self.get_bullish_signal(df)
+                else:
+                    condition_signal = self.get_bearish_signal(df)
+                    
+                logger.debug(f"{market_condition} market detected. Grid signal: {grid_signal}, Condition signal: {condition_signal}")
+                
+                # In trending markets, prefer the trending signal
+                if condition_signal:
+                    return condition_signal
+                    
+            elif market_condition == 'SIDEWAYS':
+                condition_signal = self.get_sideways_signal(df)
+                logger.debug(f"SIDEWAYS market detected. Grid signal: {grid_signal}, Sideways signal: {condition_signal}")
+                
+                # In sideways markets, prioritize mean reversion signals
+                if condition_signal:
+                    return condition_signal
+                    
+            # 6. Default to grid signal if no specialized signal was returned
+            return grid_signal
+            
+        except IndexError as e:
+            logger.error(f"IndexError in get_signal: {str(e)}")
+            logger.error(f"DataFrame shape: {df.shape if df is not None else 'None'}")
+            # Return None to prevent trading on error
             return None
-        
-        # Get latest data
-        latest = df.iloc[-1]
-        market_condition = latest['market_condition']
-        current_time = latest['open_time']
-        
-        # Update risk manager with current market condition
-        if self.risk_manager:
-            self.risk_manager.set_market_condition(market_condition)
-        
-        # Check for cool-off period first
-        if self.in_cooloff_period(current_time):
-            logger.info(f"In cool-off period after {self.consecutive_losses} consecutive losses. No trading signals.")
+        except Exception as e:
+            logger.error(f"Unexpected error in get_signal: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            # Log full traceback for debugging
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Return None to prevent trading on error
             return None
-        
-        # 1. Check for V-shaped reversals in extreme market conditions
-        reversal_signal = self.get_v_reversal_signal(df)
-        if reversal_signal:
-            logger.info(f"V-reversal detected in {market_condition} market. Signal: {reversal_signal}")
-            return reversal_signal
-        
-        # 2. Check for breakouts from squeeze conditions
-        squeeze_signal = self.get_squeeze_breakout_signal(df)
-        if squeeze_signal:
-            logger.info(f"Squeeze breakout detected. Signal: {squeeze_signal}")
-            return squeeze_signal
-        
-        # 3. Check for multi-indicator confirmation signals
-        multi_signal = self.get_multi_indicator_signal(df)
-        if multi_signal:
-            logger.info(f"Multi-indicator confirmation. Signal: {multi_signal}")
-            return multi_signal
-        
-        # 4. Get grid signal (works in all market conditions)
-        grid_signal = self.get_grid_signal(df)
-        
-        # 5. Get specific signals based on market condition
-        if market_condition in ['EXTREME_BULLISH', 'EXTREME_BEARISH']:
-            condition_signal = self.get_extreme_market_signal(df)
-            logger.debug(f"EXTREME market detected. Grid signal: {grid_signal}, Extreme signal: {condition_signal}")
-            
-            # In extreme market conditions, prefer the condition-specific signal
-            if condition_signal:
-                return condition_signal
-                
-        elif market_condition in ['BULLISH', 'BEARISH']:
-            if market_condition == 'BULLISH':
-                condition_signal = self.get_bullish_signal(df)
-            else:
-                condition_signal = self.get_bearish_signal(df)
-                
-            logger.debug(f"{market_condition} market detected. Grid signal: {grid_signal}, Condition signal: {condition_signal}")
-            
-            # In trending markets, prefer the trending signal
-            if condition_signal:
-                return condition_signal
-                
-        elif market_condition == 'SIDEWAYS':
-            condition_signal = self.get_sideways_signal(df)
-            logger.debug(f"SIDEWAYS market detected. Grid signal: {grid_signal}, Sideways signal: {condition_signal}")
-            
-            # In sideways markets, prioritize mean reversion signals
-            if condition_signal:
-                return condition_signal
-                
-        # 6. Default to grid signal if no specialized signal was returned
-        return grid_signal
 
 
 # Update the factory function to include only RAYSOL strategy
@@ -1542,5 +1599,3 @@ def get_strategy_for_symbol(symbol, strategy_name=None):
     
     # Default to base strategy if needed
     # return TradingStrategy(symbol)
-
-# End of file

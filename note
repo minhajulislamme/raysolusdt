@@ -138,3 +138,46 @@ Improved sideways market detection with squeeze alerts
 
 Enhanced momentum filtering for trend confirmation
 
+
+
+2025-05-22 20:45:06,518 - __main__ - ERROR - Error placing take profit 3 order: APIError(code=-1111): Precision is over the maximum defined for this asset.
+025-05-22 21:00:02,831 - modules.binance_client - INFO - Found 3 position-related orders for RAYSOLUSDT
+2025-05-22 21:00:02,834 - __main__ - INFO - Order Update: RAYSOLUSDT BUY STOP_MARKET CANCELED - Qty: 0.0, Price: 0.0
+2025-05-22 21:00:02,859 - modules.binance_client - INFO - Cancelled STOP_MARKET order 1160652172 for RAYSOLUSDT
+2025-05-22 21:00:02,911 - modules.binance_client - ERROR - Failed to cancel position order for RAYSOLUSDT: APIError(code=-2011): Unknown order sent.
+2025-05-22 21:00:02,988 - __main__ - INFO - Order Update: RAYSOLUSDT BUY TAKE_PROFIT_MARKET CANCELED - Qty: 0.0, Price: 0.0
+2025-05-22 21:00:02,990 - modules.binance_client - INFO - Cancelled TAKE_PROFIT_MARKET order 1160652188 for RAYSOLUSDT
+2025-05-22 21:00:03,032 - modules.binance_client - ERROR - Failed to cancel position order for RAYSOLUSDT: APIError(code=-2011): Unknown order sent.
+2025-05-22 21:00:03,066 - __main__ - INFO - Order Update: RAYSOLUSDT BUY TAKE_PROFIT_MARKET CANCELED - Qty: 0.0, Price: 0.0
+2025-05-22 21:00:03,069 - modules.binance_client - INFO - Cancelled TAKE_PROFIT_MARKET order 1160652192 for RAYSOLUSDT
+2025-05-22 21:00:03,069 - modules.binance_client - INFO - Cancelled 2 position-related orders for RAYSOLUSDT
+2025-05-22 21:00:03,110 - modules.binance_client - ERROR - Failed to cancel position order for RAYSOLUSDT: APIError(code=-2011): Unknown order sent.
+2025-05-22 21:00:03,111 - modules.binance_client - INFO - Cancelled 1 position-related orders for 
+
+
+
+
+
+2025-05-23 08:15:01,132 - __main__ - ERROR - Error in trading cycle: index 31 is out of bounds for axis 0 with size 31
+2025-05-23 08:15:01,145 - __main__ - ERROR - Traceback: Traceback (most recent call last):
+  File "/home/minhaz/raysolusdt/main.py", line 733, in check_for_signals
+    signal = strategy.get_signal(klines)
+  File "/home/minhaz/raysolusdt/modules/strategies.py", line 1419, in get_signal
+    df = self.add_indicators(df)
+  File "/home/minhaz/raysolusdt/modules/strategies.py", line 297, in add_indicators
+    df = self.supertrend_indicator.calculate(df)
+  File "/home/minhaz/raysolusdt/modules/strategies.py", line 61, in calculate
+    df.loc[df.index[i], 'final_lower'] = df['final_lower'].iloc[i-1]
+  File "/home/minhaz/raysolusdt/venv/lib/python3.10/site-packages/pandas/core/indexing.py", line 911, in __setitem__
+    iloc._setitem_with_indexer(indexer, value, self.name)
+  File "/home/minhaz/raysolusdt/venv/lib/python3.10/site-packages/pandas/core/indexing.py", line 1942, in _setitem_with_indexer
+    self._setitem_with_indexer_split_path(indexer, value, name)
+  File "/home/minhaz/raysolusdt/venv/lib/python3.10/site-packages/pandas/core/indexing.py", line 2035, in _setitem_with_indexer_split_path
+    self._setitem_single_column(loc, value, pi)
+  File "/home/minhaz/raysolusdt/venv/lib/python3.10/site-packages/pandas/core/indexing.py", line 2164, in _setitem_single_column
+    dtype = self.obj.dtypes.iloc[loc]
+  File "/home/minhaz/raysolusdt/venv/lib/python3.10/site-packages/pandas/core/generic.py", line 6460, in dtypes
+    data = self._mgr.get_dtypes()
+  File "/home/minhaz/raysolusdt/venv/lib/python3.10/site-packages/pandas/core/internals/managers.py", line 289, in get_dtypes
+    return dtypes.take(self.blknos)
+IndexError: index 31 is out of bounds for axis 0 with size 31
